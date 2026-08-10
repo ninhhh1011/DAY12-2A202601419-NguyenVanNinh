@@ -45,7 +45,7 @@ jobs:
       - run: npm install -g @railway/cli@5.35.0
       - run: |
           test -n "$RAILWAY_TOKEN"
-          env -u CI railway up --service "$RAILWAY_SERVICE"
+          railway up --ci --service "$RAILWAY_SERVICE"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
