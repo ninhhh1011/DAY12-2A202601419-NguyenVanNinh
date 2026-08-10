@@ -33,7 +33,7 @@ Railway CLI 5.35.0 was installed. `railway whoami` returned exactly: `Unauthoriz
 ## Sanitized verification
 
 ```text
-gh repo rename … --yes
+gh repo rename DAY12-2A202601419-NguyenVanNinh --repo ninhhh1011/K3-Day12-2A202601419-NguyenVanNinh --yes
 origin  https://github.com/ninhhh1011/DAY12-2A202601419-NguyenVanNinh (fetch)
 origin  https://github.com/ninhhh1011/DAY12-2A202601419-NguyenVanNinh (push)
 
@@ -61,4 +61,4 @@ POST http://127.0.0.1:8000/ask without X-API-Key -> 401
 ## Screenshots
 
 - `screenshots/dashboard.png` shows the real Docker Compose `agent` and `redis` containers healthy.
-- `screenshots/health.png` shows real local `/health`, `/ready`, and unauthenticated `/ask` responses.
+- `screenshots/health.png` shows the actual local `/health` HTTP 200 response.
