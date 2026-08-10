@@ -16,7 +16,7 @@ Trong `Settings`, `agent_api_key` không có giá trị mặc định nên app c
 khi khởi động nếu thiếu biến môi trường. Hãy mô tả một tình huống cụ thể mà
 việc "chết sớm" này cứu bạn, so với việc để mặc định `"changeme"`.
 
-> Khi deploy mà quên `AGENT_API_KEY`, `Settings()` không khởi động được nên Railway/Docker báo lỗi ngay; tôi biết phải bổ sung secret trước khi service nhận traffic. Nếu mặc định là `"changeme"`, service vẫn chạy và bất kỳ ai đoán được khóa đó có thể gọi `/ask`, làm phát sinh chi phí trước khi tôi phát hiện cấu hình thiếu.
+> `Settings()` sẽ fail-fast ngay khi nó được khởi tạo nếu thiếu `AGENT_API_KEY`, nhưng app hiện tại gọi `get_settings()` lười trong dependency của `/ask`; một process Railway có thể vẫn trả `/health` cho tới request `/ask` đầu tiên. Với Docker Compose, `${AGENT_API_KEY:?AGENT_API_KEY must be set}` chặn compose trước khi agent start, nên tôi phát hiện thiếu secret trước khi deploy nhận traffic. Muốn bảo đảm fail-fast ngay lúc process Railway khởi động, `lifespan` phải gọi `get_settings()`. Đây vẫn cứu tình huống cụ thể khi file môi trường Compose thiếu key; nếu để mặc định `"changeme"`, service có thể chạy và người đoán được khóa gọi `/ask` làm phát sinh chi phí.
 
 ---
 
@@ -49,7 +49,7 @@ docker images | grep agent
 
 Giải thích: phần dung lượng chênh lệch đó là những gì?
 
-> Tôi build Dockerfile gốc tại commit `775cc02` thành `agent:single-task8` và Dockerfile hiện tại thành `agent:multi-task8`. Hai số đo quan sát được là khác loại: trường byte `Size` của `docker image inspect` lần lượt là 1,446,266,683 byte và 63,689,823 byte; cột SIZE mà `docker images` hiển thị riêng là 1.73 GB và 270 MB. Vì đây là phép hiển thị virtual/image size riêng của Docker CLI, tôi không coi 1.73 GB và 270 MB là kết quả làm tròn của hai số byte trên. Chênh lệch chủ yếu là base `python:3.11` đầy đủ cùng các thứ build/install nằm trong image một stage; multi-stage dùng `python:3.11-slim` ở runtime và chỉ copy `/install`, `app`, `utils`, nên không mang toàn bộ môi trường builder sang image cuối.
+> Tôi build Dockerfile gốc tại commit `775cc02` thành `agent:single-task8` và Dockerfile hiện tại thành `agent:multi-task8`. Hai số đo quan sát được là khác loại: `docker image inspect .Size` (content của containerd) là 1,446,266,683 byte cho 1-stage và 63,689,823 byte (khoảng 63.69 MB) cho multi-stage; `docker images` hiển thị dung lượng unpacked/snapshot trên disk riêng là 1.73 GB và 270 MB tương ứng. Vì vậy 270 MB không phải làm tròn từ 63.69 MB, và 1.73 GB cũng không phải làm tròn từ 1,446,266,683 byte. Chênh lệch chủ yếu là base `python:3.11` đầy đủ cùng các thứ build/install nằm trong image một stage; multi-stage dùng `python:3.11-slim` ở runtime và chỉ copy `/install`, `app`, `utils`, nên không mang toàn bộ môi trường builder sang image cuối.
 
 ---
 
@@ -100,9 +100,9 @@ nhưng cost guard phải chặn, và một tình huống ngược lại.
 Nếu gộp hai endpoint làm một và cho nó kiểm tra Redis, chuyện gì xảy ra với cụm
 3 container khi Redis mất kết nối 30 giây? Trả lời theo đúng thứ tự sự kiện.
 
-> Với source hiện tại, `/health` chỉ kiểm tra process, còn `/ready` gọi `store.ping()`. Nếu gộp và để `/health` kiểm tra Redis, Redis mất đúng 30 giây chỉ có thể làm hỏng tối đa một probe theo `interval: 30s`; `retries: 3` cần ba probe thất bại liên tiếp nên chưa đạt ngưỡng unhealthy. Theo thứ tự: probe gộp có thể trả 503 và trạng thái health suy giảm; các thao tác phụ thuộc Redis cùng `/ready` thất bại; Redis phục hồi trước ngưỡng ba lỗi; probe kế tiếp thành công. Compose hiện không có `restart:`, và health status của Docker tự nó cũng không restart container, nên không có restart storm trong cấu hình thực tế này.
+> Với source hiện tại, `/health` chỉ kiểm tra process, còn `/ready` gọi `store.ping()`. Nếu gộp và để `/health` kiểm tra Redis, Redis mất đúng 30 giây chỉ có thể làm hỏng tối đa một probe theo `interval: 30s`; `retries: 3` cần ba probe thất bại liên tiếp nên Docker health hiện vẫn là healthy, chỉ tăng failing streak. Theo thứ tự: probe gộp có thể trả 503; `/ready` và các thao tác phụ thuộc Redis thất bại; Redis phục hồi trước ngưỡng ba lỗi; probe kế tiếp thành công. Compose không có `restart:`, health status của Docker tự nó không restart container, và Compose/nginx hiện không dùng `/ready` để tự rút instance khỏi traffic, nên không có restart storm hay tự loại traffic trong cấu hình thực tế này.
 >
-> Counterfactual riêng: nếu outage dài hơn, hoặc một orchestrator được cấu hình restart khi liveness fail, việc đưa Redis vào liveness có thể khiến cả ba agent lần lượt bị rút traffic/restart lặp lại dù process còn sống. Giữ `/health` tách riêng thì liveness vẫn sống; `/ready` mới báo dependency lỗi để load balancer ngừng gửi traffic, rồi nhận lại khi Redis hồi phục.
+> Counterfactual riêng: với outage dài hơn và một orchestrator/load balancer được cấu hình dùng liveness/readiness, đưa Redis vào liveness có thể khiến cả ba agent lần lượt bị rút traffic hoặc restart lặp lại dù process còn sống. Giữ `/health` tách riêng thì liveness vẫn sống; `/ready` mới là tín hiệu để một load balancer có hỗ trợ readiness ngừng gửi traffic, rồi nhận lại khi Redis hồi phục.
 
 ---
 
@@ -122,4 +122,4 @@ Ghi lại **một** lỗi bạn gặp khi deploy lên cloud (build fail, health 
 timeout, sai REDIS_URL, app không đọc `$PORT`...): thông báo lỗi là gì, bạn
 tìm ra nguyên nhân bằng cách nào, và sửa ra sao?
 
-> Lỗi thật khi thử Railway là lệnh `railway whoami` trả đúng: `Unauthorized. Please login with railway login`. Tôi xác định nguyên nhân bằng chính lệnh kiểm tra danh tính CLI: máy có Railway CLI nhưng chưa có phiên đăng nhập hợp lệ, nên chưa thể tạo/deploy cloud. Cách giải quyết là chạy đăng nhập tương tác `railway login`, rồi cấu hình project/biến môi trường và deploy lại; tôi không bịa kết quả deploy. Trong lúc bị chặn, tôi dùng Docker Compose local fallback đã chạy `/health` và `/ready` đều 200.
+> Lỗi thật khi thử Railway là lệnh `railway whoami` trả đúng: `Unauthorized. Please login with railway login`. Đây là blocker xác thực trước deployment: máy có Railway CLI nhưng chưa có phiên đăng nhập hợp lệ, nên chưa thể tạo/deploy cloud; lỗi cloud vẫn chưa được giải quyết. `railway login` là bước sửa tiếp theo bắt buộc, nhưng tôi chưa thực thi nó nên không khẳng định có deploy Railway thành công. Cách xử lý thực tế đã dùng là Docker Compose local fallback, nơi `/health` và `/ready` đều 200.
