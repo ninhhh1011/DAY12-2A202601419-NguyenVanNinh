@@ -24,7 +24,7 @@ Railway CLI 5.35.0 was installed. `railway whoami` returned exactly: `Unauthoriz
 | Variable | Source |
 | --- | --- |
 | `PORT` | Docker container command / local port mapping |
-| `AGENT_API_KEY` | ignored local `.env`; never committed or printed |
+| `AGENT_API_KEY` | ignored local `.env`; local value verified absent from tracked HEAD/history on 2026-08-10 |
 | `REDIS_URL` | Compose service URL `redis://redis:6379/0` |
 | `RATE_LIMIT_PER_MINUTE` | Compose value `10` |
 | `MONTHLY_BUDGET_USD` | Compose value `10.0` |
@@ -53,6 +53,10 @@ GET http://127.0.0.1:8000/ready -> 200
 {"status":"ready","redis":true}
 POST http://127.0.0.1:8000/ask without X-API-Key -> 401
 ```
+
+## CP5 test result
+
+`pytest tests/test_cp5.py -v` completed with **8 passed, 5 skipped**. The four public HTTPS-path checks are expected skips in `LOCAL_FALLBACK=true` mode, and the real-key public `/ask` check is skipped because no `DEPLOY_API_KEY` is set. The local Docker fallback is therefore capped at **9/15** for CP5.
 
 ## Screenshots
 
