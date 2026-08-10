@@ -59,6 +59,7 @@ class RateLimiter:
         Lưu ý thứ tự: **kiểm tra trước, ghi nhận sau**. Ghi trước rồi mới đếm
         sẽ chặn nhầm ngay ở request thứ ``limit``.
         """
+        # ponytail: ZSET commands are non-atomic; use Redis Lua for strict concurrent enforcement.
         now = now if now is not None else time.time()
         if self.hit_count(user_id, now) >= self.limit:
             raise HTTPException(

@@ -147,6 +147,7 @@ def ask(
     ``user_id`` do ``verify_api_key`` trả về, nên request không có API key
     hợp lệ sẽ dừng ở 401 trước khi chạm vào bất cứ dòng nào ở đây.
     """
+    # ponytail: check-then-record can overshoot or lose paid-call accounting; use atomic reservation/reconciliation before a real paid LLM.
     limiter.check(user_id)
     guard.check(user_id)
     history = store.get_history(user_id)
