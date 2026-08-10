@@ -1,101 +1,60 @@
-# Thông Tin Deploy — Checkpoint 5
+# Deployment Evidence — Checkpoint 5
 
-> Điền file này sau khi deploy xong. `pytest tests/test_cp5.py` đọc file này
-> để tìm địa chỉ service của bạn và gọi thử.
->
-> **Chỉ ghi TÊN biến môi trường, tuyệt đối không dán giá trị API key vào đây.**
-> Repo này công khai — dán khóa vào là mất khóa.
+## Student
 
-## Thông Tin Học Viên
+| Item | Value |
+| --- | --- |
+| Name | Nguyễn Văn Ninh |
+| Mã học viên | 2A202601419 |
+| Repository | https://github.com/ninhhh1011/DAY12-2A202601419-NguyenVanNinh |
 
-| Mục | Nội dung |
-|-----|----------|
-| Họ và tên | (điền họ tên) |
-| Mã học viên | (điền mã học viên) |
-| Repo | (điền link repo DAY12-...) |
+## Deployment
 
-## Service
+| Item | Value |
+| --- | --- |
+| Service URL | http://127.0.0.1:8000 |
+| Platform | Docker Compose local fallback; Railway was attempted first |
+| Deployment date | 2026-08-10 |
+| Redis source | Docker Compose `redis:7-alpine`, persistent `redis-data` volume |
 
-| Mục | Nội dung |
-|-----|----------|
-| Public URL | https://TODO-thay-bang-url-that.up.railway.app |
-| Platform | Railway / Render / Cloud Run — (điền platform bạn dùng) |
-| Ngày deploy | (điền ngày) |
+Railway CLI 5.35.0 was installed. `railway whoami` returned exactly: `Unauthorized. Please login with railway login`. This required an interactive Railway account login, so no Railway project or deployment was created. `LOCAL_FALLBACK=true` is set only in ignored local `.env`.
 
-## Biến Môi Trường Đã Set Trên Cloud
+## Environment variables
 
-Ghi tên biến và **nguồn giá trị**, không ghi giá trị:
+| Variable | Source |
+| --- | --- |
+| `PORT` | Docker container command / local port mapping |
+| `AGENT_API_KEY` | ignored local `.env`; never committed or printed |
+| `REDIS_URL` | Compose service URL `redis://redis:6379/0` |
+| `RATE_LIMIT_PER_MINUTE` | Compose value `10` |
+| `MONTHLY_BUDGET_USD` | Compose value `10.0` |
+| `LOG_LEVEL` | Compose value `INFO` |
 
-| Biến | Đã set | Ghi chú |
-|------|--------|---------|
-| `PORT` | ✅ | platform tự gán |
-| `AGENT_API_KEY` | ✅ | đặt trong dashboard, không nằm trong repo |
-| `REDIS_URL` | ✅ | (điền: Redis add-on của platform / Upstash / ...) |
-| `RATE_LIMIT_PER_MINUTE` | ✅ | 10 |
-| `MONTHLY_BUDGET_USD` | ✅ | 10.0 |
-| `LOG_LEVEL` | ✅ | INFO |
+## Sanitized verification
 
-## Lệnh Kiểm Tra
+```text
+gh repo rename … --yes
+origin  https://github.com/ninhhh1011/DAY12-2A202601419-NguyenVanNinh (fetch)
+origin  https://github.com/ninhhh1011/DAY12-2A202601419-NguyenVanNinh (push)
 
-Thay `<URL>` bằng Public URL ở trên:
+railway --version
+railway 5.35.0
+railway whoami
+Unauthorized. Please login with `railway login`
 
-```bash
-# 1. Liveness — mong đợi 200 {"status":"ok"}
-curl -i <URL>/health
+docker compose up -d --build
+docker compose ps
+agent  Up (healthy)  0.0.0.0:8000->8000/tcp
+redis  Up (healthy)  0.0.0.0:6379->6379/tcp
 
-# 2. Readiness — mong đợi 200 {"status":"ready"} (đã nối được Redis)
-curl -i <URL>/ready
-
-# 3. Không có API key — mong đợi 401
-curl -i -X POST <URL>/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question":"Hello"}'
-
-# 4. Có API key — mong đợi 200 kèm câu trả lời
-curl -i -X POST <URL>/ask \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: $AGENT_API_KEY" \
-  -H "X-User-Id: sv-test" \
-  -d '{"question":"Deploy là gì?"}'
-
-# 5. Rate limit — gọi 15 lần, những lần cuối phải trả 429
-for i in $(seq 1 15); do
-  curl -s -o /dev/null -w "%{http_code} " -X POST <URL>/ask \
-    -H "Content-Type: application/json" \
-    -H "X-API-Key: $AGENT_API_KEY" \
-    -H "X-User-Id: sv-test" \
-    -d '{"question":"test"}'
-done; echo
+GET http://127.0.0.1:8000/health -> 200
+{"status":"ok","service":"day12-agent","version":"1.0.0"}
+GET http://127.0.0.1:8000/ready -> 200
+{"status":"ready","redis":true}
+POST http://127.0.0.1:8000/ask without X-API-Key -> 401
 ```
 
-## Kết Quả Chạy Thật
+## Screenshots
 
-Dán output của các lệnh trên vào đây:
-
-```
-(điền output)
-```
-
-## Ảnh Chụp Màn Hình
-
-Đặt ảnh trong thư mục `screenshots/`:
-
-- `screenshots/dashboard.png` — trang quản lý service trên platform
-- `screenshots/health.png` — kết quả gọi `/health` từ trình duyệt hoặc curl
-
----
-
-## Nếu Dùng Phương Án Dự Phòng
-
-Không đăng ký được tài khoản cloud? Vẫn nộp được bài, nhưng CP5 tối đa 60% điểm:
-
-1. Đặt `LOCAL_FALLBACK=true` trong `.env`
-2. Chạy `docker compose up -d` rồi kiểm tra `docker compose ps`
-3. Chụp màn hình vào `screenshots/`
-4. Chạy `pytest tests/test_cp5.py -v` — bộ test sẽ tự chuyển sang kiểm tra
-   `http://localhost:8000`
-5. Ghi rõ lý do không deploy được vào phần dưới đây:
-
-```
-(điền lý do nếu dùng phương án dự phòng, ngược lại xóa mục này)
-```
+- `screenshots/dashboard.png` shows the real Docker Compose `agent` and `redis` containers healthy.
+- `screenshots/health.png` shows real local `/health`, `/ready`, and unauthenticated `/ask` responses.
