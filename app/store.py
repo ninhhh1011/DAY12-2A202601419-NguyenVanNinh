@@ -69,9 +69,11 @@ class ConversationStore:
              tự hết hạn, khỏi phải dọn tay.
         """
         key = self._key(user_id)
-        self.client.rpush(key, json.dumps({"role": role, "content": content}, ensure_ascii=False))
-        self.client.ltrim(key, -HISTORY_MAX_MESSAGES, -1)
-        self.client.expire(key, HISTORY_TTL_SECONDS)
+        with self.client.pipeline(transaction=True) as pipe:
+            pipe.rpush(key, json.dumps({"role": role, "content": content}, ensure_ascii=False))
+            pipe.ltrim(key, -HISTORY_MAX_MESSAGES, -1)
+            pipe.expire(key, HISTORY_TTL_SECONDS)
+            pipe.execute()
 
     def get_history(self, user_id: str) -> list[dict]:
         """Đọc lịch sử hội thoại, cũ nhất trước.
