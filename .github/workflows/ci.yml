@@ -43,9 +43,12 @@ jobs:
         with:
           persist-credentials: false
       - run: npm install -g @railway/cli@5.35.0
-      - run: railway up --service "${{ vars.RAILWAY_SERVICE }}"
+      - run: |
+          test -n "$RAILWAY_TOKEN"
+          env -u CI railway up --service "$RAILWAY_SERVICE"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
       - name: Smoke test
         run: >
           curl --fail --show-error --silent --retry 6 --retry-all-errors
