@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -10,8 +13,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
@@ -23,7 +28,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - run: docker build -t day12-agent:ci .
 
   deploy:
@@ -32,9 +39,15 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.RAILWAY_SERVICE != '' && vars.PUBLIC_URL != ''
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - run: npm install -g @railway/cli
-      - run: railway up --service "${{ vars.RAILWAY_SERVICE }}" --detach
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: npm install -g @railway/cli@5.35.0
+      - run: railway up --service "${{ vars.RAILWAY_SERVICE }}"
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      - run: curl -fsS "${{ vars.PUBLIC_URL }}/health"
+      - name: Smoke test
+        run: >
+          curl --fail --show-error --silent --retry 6 --retry-all-errors
+          --retry-delay 5 --retry-max-time 60 --connect-timeout 10 --max-time 15
+          "${{ vars.PUBLIC_URL }}/health"
