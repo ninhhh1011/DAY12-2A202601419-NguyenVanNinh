@@ -49,7 +49,7 @@ docker images | grep agent
 
 Giải thích: phần dung lượng chênh lệch đó là những gì?
 
-> Tôi build Dockerfile gốc tại commit `775cc02` thành `agent:single-task8` và Dockerfile hiện tại thành `agent:multi-task8`; `docker image inspect` cho lần lượt 1,446,266,683 byte và 63,689,823 byte (Docker CLI làm tròn thành 1.73 GB và 270 MB). Chênh lệch chủ yếu là base `python:3.11` đầy đủ cùng các thứ build/install nằm trong image một stage; multi-stage dùng `python:3.11-slim` ở runtime và chỉ copy `/install`, `app`, `utils`, nên không mang toàn bộ môi trường builder sang image cuối.
+> Tôi build Dockerfile gốc tại commit `775cc02` thành `agent:single-task8` và Dockerfile hiện tại thành `agent:multi-task8`. Hai số đo quan sát được là khác loại: trường byte `Size` của `docker image inspect` lần lượt là 1,446,266,683 byte và 63,689,823 byte; cột SIZE mà `docker images` hiển thị riêng là 1.73 GB và 270 MB. Vì đây là phép hiển thị virtual/image size riêng của Docker CLI, tôi không coi 1.73 GB và 270 MB là kết quả làm tròn của hai số byte trên. Chênh lệch chủ yếu là base `python:3.11` đầy đủ cùng các thứ build/install nằm trong image một stage; multi-stage dùng `python:3.11-slim` ở runtime và chỉ copy `/install`, `app`, `utils`, nên không mang toàn bộ môi trường builder sang image cuối.
 
 ---
 
@@ -91,7 +91,7 @@ con số đó.
 Hai cơ chế này khác nhau ở điểm nào? Cho một tình huống mà rate limit cho qua
 nhưng cost guard phải chặn, và một tình huống ngược lại.
 
-> Rate limit của `RateLimiter` giới hạn số request trong cửa sổ 60 giây theo user; cost guard của `CostGuard` kiểm tra tổng USD theo user/tháng. Ví dụ rate limit còn quota nhưng user đã chi 10.0 USD: request tiếp theo có thể qua rate limit nhưng bị cost guard trả 402 `monthly budget exceeded`. Chiều ngược lại, user chưa chạm budget tháng nhưng gửi request thứ 11 trong chưa đầy 60 giây: cost guard cho qua còn rate limit trả 429 `rate limit exceeded`.
+> Rate limit của `RateLimiter` giới hạn số request trong cửa sổ 60 giây theo user; cost guard của `CostGuard` kiểm tra tổng USD theo user/tháng. Ví dụ user đang ở 9.99999 USD: một request còn quota được `guard.check()` cho qua vì mặc định `estimated_cost=0.0`, rồi `record()` cộng chi phí thực tế 0.00002505 USD thành 10.00001505 USD. Request đầu tiên của phút/cửa sổ mới qua rate limit nhưng `spent + 0.0 > 10.0` nên cost guard trả 402 `monthly budget exceeded`; nếu đúng bằng 10.0 thì điều kiện `>` chưa chặn. Chiều ngược lại, user còn dưới 10.0 USD nhưng gửi request thứ 11 trong chưa đầy 60 giây: endpoint thực tế gọi limiter trước nên trả 429 `rate limit exceeded`; cost guard vẫn có đủ ngân sách và sẽ cho qua nếu được gọi.
 
 ---
 
@@ -100,7 +100,9 @@ nhưng cost guard phải chặn, và một tình huống ngược lại.
 Nếu gộp hai endpoint làm một và cho nó kiểm tra Redis, chuyện gì xảy ra với cụm
 3 container khi Redis mất kết nối 30 giây? Trả lời theo đúng thứ tự sự kiện.
 
-> Với source hiện tại, `/health` chỉ kiểm tra process, còn `/ready` gọi `store.ping()`. Nếu gộp và để `/health` kiểm tra Redis, khi Redis mất kết nối thì lần probe `/health` kế tiếp của từng agent trả 503; healthcheck Compose có `interval: 30s`, `retries: 3`, nên các instance lần lượt bị đánh dấu unhealthy sau các probe thất bại. File Compose hiện không có `restart:` nên Docker Compose chỉ đánh dấu unhealthy, không tự restart; load balancer/orchestrator có chính sách liveness restart sẽ lần lượt rút traffic rồi restart cả ba, gây gián đoạn dù process Python vốn vẫn sống. Tách `/ready` tránh biến lỗi dependency 30 giây thành lỗi liveness của cả cụm.
+> Với source hiện tại, `/health` chỉ kiểm tra process, còn `/ready` gọi `store.ping()`. Nếu gộp và để `/health` kiểm tra Redis, Redis mất đúng 30 giây chỉ có thể làm hỏng tối đa một probe theo `interval: 30s`; `retries: 3` cần ba probe thất bại liên tiếp nên chưa đạt ngưỡng unhealthy. Theo thứ tự: probe gộp có thể trả 503 và trạng thái health suy giảm; các thao tác phụ thuộc Redis cùng `/ready` thất bại; Redis phục hồi trước ngưỡng ba lỗi; probe kế tiếp thành công. Compose hiện không có `restart:`, và health status của Docker tự nó cũng không restart container, nên không có restart storm trong cấu hình thực tế này.
+>
+> Counterfactual riêng: nếu outage dài hơn, hoặc một orchestrator được cấu hình restart khi liveness fail, việc đưa Redis vào liveness có thể khiến cả ba agent lần lượt bị rút traffic/restart lặp lại dù process còn sống. Giữ `/health` tách riêng thì liveness vẫn sống; `/ready` mới báo dependency lỗi để load balancer ngừng gửi traffic, rồi nhận lại khi Redis hồi phục.
 
 ---
 
