@@ -44,7 +44,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      AGENT_API_KEY: ${AGENT_API_KEY}
+      AGENT_API_KEY: ${AGENT_API_KEY:?AGENT_API_KEY must be set}
       REDIS_URL: redis://redis:6379/0
       RATE_LIMIT_PER_MINUTE: 10
       MONTHLY_BUDGET_USD: 10.0
